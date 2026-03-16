@@ -112,8 +112,8 @@ The result is a progressively deeper answer across multiple iterations, not a on
 ### Setup
 
 ```bash
-git clone <repo-url>
-cd "Research Automation/deep_research_agent"
+git clone https://github.com/navinsreyas/research-agent.git
+cd research-agent/deep_research_agent
 
 pip install -r requirements.txt
 
@@ -162,27 +162,27 @@ Final Answer:
 ## Project Structure
 
 ```
-Research Automation/
+research-agent/
 ├── README.md
 ├── .gitignore
+├── .gitattributes
+├── .env.example                  # Copy to .env and fill in your API keys
+├── LICENSE
 │
-├── deep_research_agent/          # Source code
-│   ├── run_agent.py              # CLI entry point — streaming, HITL, cost display
-│   ├── graph.py                  # LangGraph compilation — nodes, edges, SQLite persistence
-│   ├── state.py                  # ResearchState TypedDict — all 19 state fields
-│   ├── requirements.txt
-│   ├── nodes/
-│   │   ├── real_nodes.py         # Production nodes (plan, search, synthesize, critique, refine)
-│   │   └── mock_nodes.py         # Deterministic mock nodes for testing without API calls
-│   └── utils/
-│       ├── scraper.py            # Jina Reader wrapper — fetch full article content
-│       ├── scoring.py            # Source credibility heuristic scorer
-│       ├── cache.py              # @disk_cache decorator — JSON file-based caching
-│       ├── tracker.py            # CostTracker singleton — token + API cost aggregation
-│       └── logger.py             # RotatingFileHandler — logs/deep_research_agent.log
-│
-└── docs/                         # Private learning & planning notes (gitignored)
-    └── FOR_ME.md                 # Deep-dive architecture guide with war stories
+└── deep_research_agent/          # Source code
+    ├── run_agent.py              # CLI entry point — streaming, HITL, cost display
+    ├── graph.py                  # LangGraph compilation — nodes, edges, SQLite persistence
+    ├── state.py                  # ResearchState TypedDict — all 19 state fields
+    ├── requirements.txt
+    ├── nodes/
+    │   ├── real_nodes.py         # Production nodes (plan, search, synthesize, critique, refine)
+    │   └── mock_nodes.py         # Deterministic mock nodes for testing without API calls
+    └── utils/
+        ├── scraper.py            # Jina Reader wrapper — fetch full article content
+        ├── scoring.py            # Source credibility heuristic scorer
+        ├── cache.py              # @disk_cache decorator — JSON file-based caching
+        ├── tracker.py            # CostTracker singleton — token + API cost aggregation
+        └── logger.py             # RotatingFileHandler — logs/deep_research_agent.log
 ```
 
 ---
@@ -275,4 +275,4 @@ Prevents infinite loops when the LLM is perpetually unsatisfied.
 
 ---
 
-*Built as a learning project exploring LangGraph, agentic loops, and production AI system design.*
+*Built to explore production patterns in LangGraph-based agentic systems — parallel execution, iterative self-critique, and human-in-the-loop steering.*
