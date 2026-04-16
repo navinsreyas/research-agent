@@ -275,4 +275,4 @@ Prevents infinite loops when the LLM is perpetually unsatisfied.
 
 ---
 
-*Built to explore production patterns in LangGraph-based agentic systems — parallel execution, iterative self-critique, and human-in-the-loop steering.*
+*Built to demonstrate production patterns in LangGraph-based agentic systems — parallel execution, iterative self-critique, and human-in-the-loop steering.*
