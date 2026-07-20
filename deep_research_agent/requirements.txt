@@ -1,7 +1,8 @@
 langgraph
 langgraph-checkpoint-sqlite
-langchain-openai
-langchain-anthropic
+langchain-groq
 tavily-python
 python-dotenv
 tenacity
+requests
+langsmith  # optional LangSmith tracing backend (activated via LANGCHAIN_* env vars)

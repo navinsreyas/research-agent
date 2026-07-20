@@ -11,7 +11,7 @@ Scores each source on a 0.0-1.0 scale using three heuristics:
 
 import logging
 import re
-from typing import Dict, List
+from typing import Dict
 
 
 def calculate_source_score(url: str, content: str) -> Dict:

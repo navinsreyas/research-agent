@@ -1,6 +1,8 @@
 # ── Personal learning & planning documents ──────────────────────────────────
 # These are private notes meant for the developer, not for public viewing.
-docs/
+docs/*
+!docs/ARCHITECTURE.md
+!docs/PROJECT_STATUS.md
 CLAUDE.md
 .claude/
 
@@ -27,6 +29,11 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+
+# Tool caches (lint / type-check / test)
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 
 # Virtual environments
 .venv/

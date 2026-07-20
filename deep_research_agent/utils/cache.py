@@ -14,7 +14,7 @@ import hashlib
 import os
 import logging
 from functools import wraps
-from typing import Any, Callable
+from typing import Callable
 
 CACHE_FILE = "cache.json"
 

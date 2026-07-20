@@ -14,10 +14,9 @@ import logging
 import os
 import time
 from typing import Dict, Any
-from langchain_anthropic import ChatAnthropic
+from langchain_groq import ChatGroq
 from tavily import TavilyClient
 from tenacity import retry, stop_after_attempt, wait_exponential
-from langgraph.types import Send
 
 # Phase 5: Deep Research Upgrade imports
 from utils.scraper import scrape_url
@@ -26,6 +25,21 @@ from utils.scoring import calculate_source_score
 # Production Optimization: Caching and Cost Tracking
 from utils.cache import disk_cache
 from utils.tracker import CostTracker
+
+
+def get_llm(temperature: float = 0.0) -> ChatGroq:
+    """
+    Shared LLM factory — the single place the provider and model are defined.
+
+    Returns a Groq-backed chat client (Llama 3.3 70B via Groq), reading GROQ_API_KEY
+    from the environment. temperature is passed per call so each node keeps its
+    original sampling behavior (plan/critique 0.0, synthesize 0.3, refine 0.2).
+    """
+    return ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=temperature,
+        api_key=os.getenv("GROQ_API_KEY"),  # type: ignore[arg-type]  # str|None coerced to SecretStr by langchain at runtime
+    )
 
 
 @disk_cache
@@ -97,11 +111,7 @@ def plan_node(state: Dict[str, Any]) -> Dict[str, Any]:
             }]
         }
 
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-5-20250929",
-        temperature=0.0,
-        api_key=os.getenv("ANTHROPIC_API_KEY")
-    )
+    llm = get_llm(temperature=0.0)
 
     has_feedback = critique.get("user_steering", False)
 
@@ -178,7 +188,7 @@ No markdown, no explanations, just the JSON object."""
                 response.usage_metadata.get('output_tokens', 0)
             )
 
-        response_text = response.content.strip()
+        response_text = response.content.strip()  # type: ignore[union-attr]  # content typed str|list; the model returns str
         if response_text.startswith("```"):
             lines = response_text.split("\n")
             response_text = "\n".join(lines[1:-1]) if len(lines) > 2 else response_text
@@ -336,11 +346,7 @@ def synthesize_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     logger = logging.getLogger(__name__)
 
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-5-20250929",
-        temperature=0.3,
-        api_key=os.getenv("ANTHROPIC_API_KEY")
-    )
+    llm = get_llm(temperature=0.3)
 
     task = state.get("task", "")
     knowledge_base = state.get("knowledge_base", [])
@@ -464,9 +470,9 @@ def critique_node(state: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"[critique_node] iteration={iteration}, has_user_feedback={user_feedback is not None}")
 
     if user_feedback:
-        print(f"\n[CRITIQUE] USER STEERING DETECTED")
+        print("\n[CRITIQUE] USER STEERING DETECTED")
         print(f"   Feedback: \"{user_feedback}\"")
-        print(f"   Forcing REFINE to apply steering instructions...")
+        print("   Forcing REFINE to apply steering instructions...")
         logger.info(f"[critique_node] User steering: '{user_feedback[:100]}'")
 
         return {
@@ -488,11 +494,7 @@ def critique_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "user_feedback": None  # Clear after processing — each feedback applies once
         }
 
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-5-20250929",
-        temperature=0.0,
-        api_key=os.getenv("ANTHROPIC_API_KEY")
-    )
+    llm = get_llm(temperature=0.0)
 
     if iteration >= max_iterations:
         logger.warning(f"[critique_node] Circuit breaker: iteration={iteration} >= max={max_iterations}")
@@ -545,7 +547,7 @@ Return ONLY: {{"score": 0.85, "message": "Brief explanation"}}
                 response.usage_metadata.get('output_tokens', 0)
             )
 
-        response_text = response.content.strip()
+        response_text = response.content.strip()  # type: ignore[union-attr]  # content typed str|list; the model returns str
         if response_text.startswith("```"):
             lines = response_text.split("\n")
             response_text = "\n".join(lines[1:-1]) if len(lines) > 2 else response_text
@@ -571,20 +573,26 @@ Return ONLY: {{"score": 0.85, "message": "Brief explanation"}}
         }
 
     except Exception as e:
-        # Force pass on error to avoid an infinite loop
+        # HONEST FAILURE: a critique that could not run must NOT report a passing score.
+        # This previously forced score=1.0/passed=True, disguising an evaluation failure
+        # (e.g. Groq free-tier 413 / 12k-TPM limit on full context) as a perfect pass —
+        # a false positive. Now the failure is surfaced: score 0.0, passed False, and an
+        # explicit evaluation_error flag. The router then routes to refine, and the
+        # circuit breaker still ends the loop at max_iterations, so a failed evaluation
+        # is never reported as a pass.
         logger.error(f"[critique_node] Critique failed: {type(e).__name__}: {str(e)}", exc_info=True)
         return {
-            "quality_score": 1.0,
+            "quality_score": 0.0,
             "critique": {
-                "score": 1.0,
-                "message": f"Critique failed: {str(e)}. Forcing pass.",
-                "passed": True,
-                "error": True
+                "score": 0.0,
+                "message": f"Evaluation unavailable — critique failed: {str(e)}",
+                "passed": False,
+                "evaluation_error": True
             },
             "execution_log": [{
                 "node": "critique",
                 "iteration": iteration,
-                "action": "Critique failed, forcing pass",
+                "action": "Critique failed — evaluation unavailable (NOT a pass)",
                 "status": "error",
                 "error": str(e)
             }]
@@ -622,11 +630,7 @@ def refine_node(state: Dict[str, Any]) -> Dict[str, Any]:
             }]
         }
 
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-5-20250929",
-        temperature=0.2,
-        api_key=os.getenv("ANTHROPIC_API_KEY")
-    )
+    llm = get_llm(temperature=0.2)
 
     kb_summary = "\n".join([
         f"- {item.get('title', 'Unknown')} ({item.get('url', '')[:50]}...)"
@@ -673,7 +677,7 @@ Be specific and actionable. These gaps will be used to generate new search queri
     """
 
     try:
-        logger.info(f"[refine_node] Running detective logic...")
+        logger.info("[refine_node] Running detective logic...")
         start_time = time.time()
         response = llm.invoke(detective_prompt)
         duration = time.time() - start_time
@@ -685,7 +689,7 @@ Be specific and actionable. These gaps will be used to generate new search queri
                 response.usage_metadata.get('output_tokens', 0)
             )
 
-        response_text = response.content.strip()
+        response_text = response.content.strip()  # type: ignore[union-attr]  # content typed str|list; the model returns str
         if response_text.startswith("```"):
             lines = response_text.split("\n")
             response_text = "\n".join(lines[1:-1]) if len(lines) > 2 else response_text

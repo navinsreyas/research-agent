@@ -1,6 +1,8 @@
 # Deep Research Agent
 
-A production-grade autonomous research agent built with [LangGraph](https://github.com/langchain-ai/langgraph) and Claude. Give it a research question; it plans, searches, reads full articles, scores source credibility, critiques its own work, identifies knowledge gaps, and iterates — all while pausing for your feedback.
+[![Tests](https://github.com/navinsreyas/research-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/navinsreyas/research-agent/actions/workflows/tests.yml)
+
+An autonomous research agent built with [LangGraph](https://github.com/langchain-ai/langgraph) and Groq (Llama 3.3 70B) that runs locally from the CLI (not deployed). Give it a research question; it plans, searches, reads full articles, scores source credibility, critiques its own work, identifies knowledge gaps, and iterates — all while pausing for your feedback.
 
 ---
 
@@ -64,7 +66,7 @@ The result is a progressively deeper answer across multiple iterations, not a on
 | Decision | Choice | Why |
 |---|---|---|
 | Graph framework | LangGraph | Native support for cyclic graphs, Send API, checkpointing |
-| Parallel search | Send API (map-reduce) | 3x speedup — workers run simultaneously |
+| Parallel search | Send API (map-reduce) | 44% faster (1.79x) on the search fan-out, averaged over 3 runs, cache disabled |
 | State merging | `operator.add` on lists | Accumulates findings across iterations without losing history |
 | Persistence | SQLite (`SqliteSaver`) | Durable checkpoints, no external database needed |
 | Human-in-loop | `interrupt_before=["critique"]` | User reviews draft before quality evaluation |
@@ -82,7 +84,7 @@ The result is a progressively deeper answer across multiple iterations, not a on
 - **Detective logic** — LLM identifies 2–3 knowledge gaps after each iteration; next iteration targets them
 - **Human-in-the-loop steering** — pause after each draft; approve, quit, or redirect the research
 - **SQLite persistence** — sessions survive restarts; full checkpoint history
-- **Cost tracking** — tracks Claude tokens and Tavily API calls with estimated USD cost
+- **Cost tracking** — tracks Groq LLM tokens and Tavily API calls with estimated USD cost
 - **Disk caching** — repeated searches are served from cache instantly
 - **Circuit breaker** — forces completion after `max_iterations` to prevent infinite loops
 - **Graceful degradation** — every failure mode has a fallback (scrape fail → snippet, critique fail → force pass)
@@ -94,7 +96,7 @@ The result is a progressively deeper answer across multiple iterations, not a on
 | Tool | Role |
 |---|---|
 | [LangGraph](https://github.com/langchain-ai/langgraph) | Cyclic graph orchestration, state management, checkpointing |
-| [Claude (claude-sonnet-4-5)](https://www.anthropic.com/) | Planning, synthesis, critique, gap detection |
+| [Groq — Llama 3.3 70B](https://groq.com/) | Planning, synthesis, critique, gap detection |
 | [Tavily](https://tavily.com/) | Web search optimized for LLM workflows |
 | [Jina Reader](https://jina.ai/reader/) | Full-article scraping (free tier, Markdown output) |
 | [tenacity](https://tenacity.readthedocs.io/) | Exponential backoff retry for API calls |
@@ -107,7 +109,7 @@ The result is a progressively deeper answer across multiple iterations, not a on
 ### Prerequisites
 
 - Python 3.11+
-- API keys for [Anthropic](https://console.anthropic.com/) and [Tavily](https://tavily.com/)
+- API keys for [Groq](https://console.groq.com/) and [Tavily](https://tavily.com/)
 
 ### Setup
 
@@ -118,30 +120,32 @@ cd research-agent/deep_research_agent
 pip install -r requirements.txt
 
 # Create .env file
-echo "ANTHROPIC_API_KEY=your_key_here" > .env
+echo "GROQ_API_KEY=your_key_here" > .env
 echo "TAVILY_API_KEY=your_key_here" >> .env
 
 python run_agent.py
 ```
 
+**Benchmark:** parallel vs sequential search — `python benchmarks/benchmark_parallel.py` (real Tavily calls; cache disabled).
+
 ### Example Session
 
 ```
 What would you like to research?
-> How does Claude's extended thinking compare to OpenAI's o3?
+> What is the current state of solid-state batteries?
 
 [Iteration 0]
   Planning: Breaking into 3 sub-queries...
   Searching in parallel:
-    ✓ execute_search_query: "Claude extended thinking benchmark performance"
-    ✓ execute_search_query: "OpenAI o3 reasoning capabilities"
-    ✓ execute_search_query: "LLM reasoning comparison 2025"
-  Synthesizing: Scored 9 sources (top: 0.90, 0.85, 0.70)...
+    ✓ execute_search_query: "solid-state battery energy density 2025"
+    ✓ execute_search_query: "solid-state battery commercialization timeline"
+    ✓ execute_search_query: "solid-state battery vs lithium-ion safety"
+  Synthesizing: Scored 9 sources (top: 0.90, 0.80, 0.70)...
   Draft ready. Quality score: 0.72
 
 [PAUSE] Review the draft above.
   Press Enter to approve, type feedback to steer, or 'q' to quit:
-> Focus more on coding task benchmarks
+> Focus more on manufacturing challenges
 
 [Iteration 1]
   Planning: Generating queries targeting knowledge gaps + your feedback...
@@ -153,8 +157,8 @@ Final Answer:
 === Session Cost ===
   Tavily searches: 6 (3 cached)
   Jina scrapes: 6
-  Claude tokens: 12,450 in / 2,100 out
-  Estimated cost: $0.07
+  Groq tokens: 12,450 in / 2,100 out
+  Estimated cost: $0.01
 ```
 
 ---
@@ -172,7 +176,7 @@ research-agent/
 └── deep_research_agent/          # Source code
     ├── run_agent.py              # CLI entry point — streaming, HITL, cost display
     ├── graph.py                  # LangGraph compilation — nodes, edges, SQLite persistence
-    ├── state.py                  # ResearchState TypedDict — all 19 state fields
+    ├── state.py                  # ResearchState TypedDict — all 17 state fields
     ├── requirements.txt
     ├── nodes/
     │   ├── real_nodes.py         # Production nodes (plan, search, synthesize, critique, refine)
@@ -272,6 +276,44 @@ Prevents infinite loops when the LLM is perpetually unsatisfied.
 **Nested f-strings can't contain backslashes (Python 3.11).** Extract complex expressions to variables before embedding them in f-strings.
 
 ---
+
+## Observability
+
+Every LLM call goes through LangChain's `ChatGroq` and the pipeline is a LangGraph, so a run can be traced end to end in **LangSmith** with no changes to any node. Tracing is **off by default** and turns on entirely through environment variables.
+
+**What gets traced (when enabled):** all four LLM nodes — `plan`, `synthesize`, `critique`, and `refine` (the detective) — each with its prompt, response, token usage, and latency, plus the LangGraph structure of the run (the parallel search fan-out and the loop back to `plan`). Tavily/Jina calls appear as nested spans inside each node, and failures/retries surface as errored spans.
+
+**How to enable it.** These are standard LangChain/LangSmith variables — the repo's code doesn't read them; LangChain's runtime does, once `run_agent.py` loads your `.env` via `load_dotenv()`. Uncomment them in `.env`:
+
+```bash
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_PROJECT=deep-research-agent      # optional; groups runs in the UI
+```
+
+(`LANGSMITH_TRACING` / `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` are accepted as aliases.) On startup the runner prints whether tracing is on, so you can confirm before the run.
+
+**What one research run's trace looks like.** The trace is a tree rooted at the graph run. `plan` runs first (one LLM call). Then the **Send API fan-out** appears as sibling `execute_search_query` spans running side by side — one per sub-query — which is where the parallelism is visible at a glance. Those merge into `synthesize` (one LLM call). The graph then **pauses for human-in-the-loop review before `critique`**: in the trace this shows as the run stopping at the interrupt, with the post-approval work traced as the resumed continuation (`critique`, then `refine` if it loops back). Each `ChatGroq` span carries its token counts and duration, so you can see what every step cost. Note: the disk cache is a local wrapper, not a LangChain component, so **cache hits are recorded in the file log (`logs/deep_research_agent.log`), not in the LangSmith trace**.
+
+**This is not service monitoring.** LangSmith traces agent *reasoning* — which node ran, which LLM/tool was called, what each step cost in tokens and time, and where a chain failed. Prometheus/Grafana-style tools watch *service health* — request rate, p99 latency, error rate, CPU/memory. One explains why a single run behaved as it did; the other tells you whether the service is healthy in aggregate.
+
+![LangSmith trace — parallel Send API fan-out](assets/langsmith_fanout.png)
+
+*LangSmith trace of one research run — parallel Send API fan-out (three concurrent `execute_search_query` spans).*
+
+### Known limitation — Groq free-tier rate limit
+
+On Groq's free tier (12,000 tokens/minute), the **critique/refine loop can exceed the limit** on full-size research context and return a 413. The **parallel-search and synthesize path runs fine** — it's the evaluation step over the full accumulated context that's large. When critique can't run it now reports the failure honestly (score 0, `evaluation_error`), never a false pass, and the circuit breaker still ends the loop. Running the full iterative loop reliably needs a **higher-tier Groq key** or **payload reduction** (trimming the context sent to critique) — noted as future work.
+
+---
+
+## How this agent is tested
+
+The deterministic scaffolding is unit-tested with `pytest` and **no real API or network calls** — the LLM and web layers are mocked. Four things are covered: the source-credibility scorer (fixed inputs → fixed scores), the disk cache (a repeated query is served from disk, not re-fetched), SQLite checkpointing (an interrupted run resumes with its accumulated state intact), and the Tavily retry/backoff decorator (a transient 429 is retried, not raised). These have a single correct answer, so they belong in CI. The *model-dependent* behavior — draft quality, whether a critique score is "right," whether the detective finds the best gaps — is non-deterministic and can only be **evaluated** (eval sets + human/LLM judgment), not unit-tested; asserting exact model output would test the mock, not the agent. CI runs the whole suite on every push and needs no API keys.
+
+```bash
+pytest        # from the repo root; no keys required
+```
 
 ---
 

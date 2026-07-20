@@ -1,13 +1,13 @@
 """
 Session cost tracker for the Deep Research Agent.
 
-Aggregates Tavily search, Jina scrape, and Claude token usage across the
+Aggregates Tavily search, Jina scrape, and Groq LLM token usage across the
 entire session using class-level variables (singleton pattern). Call
 CostTracker.display_costs() at the end of a session to print a summary.
 
-Pricing (as of 2026-02):
+Pricing (as of 2026-07):
   Tavily:  $0.001 per search
-  Claude Sonnet 4.5:  $3.00 / 1M input tokens, $15.00 / 1M output tokens
+  Llama 3.3 70B (Groq):  $0.59 / 1M input tokens, $0.79 / 1M output tokens
   Jina Reader: free
 """
 
@@ -31,8 +31,8 @@ class CostTracker:
 
     # Pricing constants
     COST_PER_SEARCH = 0.001
-    COST_PER_INPUT_TOKEN = 3.00 / 1_000_000
-    COST_PER_OUTPUT_TOKEN = 15.00 / 1_000_000
+    COST_PER_INPUT_TOKEN = 0.59 / 1_000_000
+    COST_PER_OUTPUT_TOKEN = 0.79 / 1_000_000
     COST_PER_SCRAPE = 0.0
 
     # Counters
@@ -72,7 +72,7 @@ class CostTracker:
 
     @classmethod
     def track_llm(cls, input_tokens: int, output_tokens: int):
-        """Record token usage from a Claude API call."""
+        """Record token usage from a Groq API call."""
         cls.input_tokens += input_tokens
         cls.output_tokens += output_tokens
         cls.llm_calls += 1
@@ -112,7 +112,7 @@ class CostTracker:
         print("\nSCRAPING (Jina Reader):")
         print(f"  URLs scraped:      {cls.scrape_count} (free)")
 
-        print("\nLLM (Claude Sonnet 4.5):")
+        print("\nLLM (Llama 3.3 70B via Groq):")
         if cls.llm_calls > 0:
             print(f"  API calls:         {cls.llm_calls}")
             print(f"  Input tokens:      {cls.input_tokens:,} × ${cls.COST_PER_INPUT_TOKEN:.6f} = ${cls.input_tokens * cls.COST_PER_INPUT_TOKEN:.4f}")

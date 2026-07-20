@@ -1,0 +1,31 @@
+name: tests
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (no API keys needed — LLM and network are mocked)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deep_research_agent/requirements.txt
+          pip install pytest ruff==0.15.22 mypy==1.14.1 types-requests==2.33.0.20260712
+
+      - name: Lint with Ruff
+        run: ruff check deep_research_agent tests benchmarks
+
+      - name: Type-check with MyPy (--ignore-missing-imports; third-party stubs don't fail)
+        working-directory: deep_research_agent
+        env:
+          MYPYPATH: .
+        run: mypy --ignore-missing-imports --explicit-package-bases utils nodes state.py graph.py run_agent.py
+
+      - name: Run test suite
+        run: pytest

@@ -37,7 +37,7 @@ def validate_environment() -> bool:
     load_dotenv()
 
     required_keys = {
-        "ANTHROPIC_API_KEY": "https://console.anthropic.com/settings/keys",
+        "GROQ_API_KEY": "https://console.groq.com/keys",
         "TAVILY_API_KEY": "https://app.tavily.com/home"
     }
 
@@ -56,6 +56,21 @@ def validate_environment() -> bool:
     if missing_keys:
         print("\n[WARN] Cannot start — add missing keys to your .env file")
         return False
+
+    # LangSmith tracing is enabled purely via environment variables loaded above by
+    # load_dotenv(). LangChain auto-traces every ChatGroq call and the LangGraph
+    # run when these are set — no node code is involved. Surface the status so the
+    # user knows whether this run is being traced.
+    tracing_on = (
+        os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true"
+        or os.getenv("LANGSMITH_TRACING", "").lower() == "true"
+    )
+    if tracing_on:
+        project = os.getenv("LANGCHAIN_PROJECT") or os.getenv("LANGSMITH_PROJECT") or "default"
+        print(f"[OK] LangSmith tracing ENABLED (project: {project})")
+        logger.info(f"[validate_environment] LangSmith tracing enabled, project={project}")
+    else:
+        print("[--] LangSmith tracing off (set LANGCHAIN_TRACING_V2=true to enable)")
 
     print("[OK] Environment validation passed\n")
     logger.info("[validate_environment] Passed")
@@ -132,24 +147,24 @@ def print_node_update(node_name: str, update_data: Dict[str, Any], iteration: in
 
         print(f"\n[CRITIQUE] Iteration {iteration}")
         print(f"   Quality Score: {score:.2f}")
-        print(f"   Threshold: 0.85")
+        print("   Threshold: 0.85")
 
         if circuit_breaker:
-            print(f"   [WARN] Circuit Breaker Activated — max iterations reached")
+            print("   [WARN] Circuit Breaker Activated — max iterations reached")
 
         print(f"   Feedback: {message}")
 
         if score > 0.85:
-            print(f"   -> Decision: ACCEPT (score > 0.85)")
+            print("   -> Decision: ACCEPT (score > 0.85)")
         else:
-            print(f"   -> Decision: REFINE (score <= 0.85)")
+            print("   -> Decision: REFINE (score <= 0.85)")
         print()
 
     elif node_name == "refine":
         new_iter = update_data.get("iteration_count", 0)
-        print(f"\n[REFINE]")
+        print("\n[REFINE]")
         print(f"   Moving to iteration {new_iter}")
-        print(f"   Looping back to planning...\n")
+        print("   Looping back to planning...\n")
 
 
 def stream_graph_execution(graph, initial_state: Dict[str, Any], config: Dict[str, Any]):
@@ -325,13 +340,13 @@ def run_interactive_research_agent():
     print("[SUCCESS] RESEARCH COMPLETE")
     print("=" * 70)
 
-    print(f"\n[STATS]")
+    print("\n[STATS]")
     print(f"   URLs visited:    {len(visited_urls)} ({len(unique_urls)} unique)")
     print(f"   Iterations:      {iterations + 1}")
     print(f"   Quality score:   {quality:.2f}")
     print(f"   Execution time:  {duration:.1f}s")
 
-    print(f"\n[DRAFT] Final Research Answer:")
+    print("\n[DRAFT] Final Research Answer:")
     print("=" * 70)
     print(draft)
     print("=" * 70)
