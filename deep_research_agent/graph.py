@@ -84,7 +84,6 @@ def create_research_graph():
     Returns:
         Compiled LangGraph with parallel execution, SQLite checkpointing, and human-in-the-loop
     """
-    # Initialize the state graph with ResearchState schema
     workflow = StateGraph(ResearchState)
 
     # Add all nodes to the graph
@@ -94,7 +93,6 @@ def create_research_graph():
     workflow.add_node("critique", critique_node)
     workflow.add_node("refine", refine_node)
 
-    # Set the entry point (where the graph starts)
     workflow.set_entry_point("plan")
 
     # Map-Reduce Edges using conditional_edges
@@ -174,12 +172,11 @@ def create_research_graph():
     conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
     checkpointer = SqliteSaver(conn)
 
-    # Compile with checkpointing and interrupts
     # Why interrupt_before=["critique"]? Pauses BEFORE critique node executes
     # This allows user to review the draft after synthesis
     graph = workflow.compile(
         checkpointer=checkpointer,
-        interrupt_before=["critique"]  # Pause BEFORE critique node executes
+        interrupt_before=["critique"]
     )
 
     return graph

@@ -87,7 +87,7 @@ The result is a progressively deeper answer across multiple iterations, not a on
 - **Cost tracking** — tracks Groq LLM tokens and Tavily API calls with estimated USD cost
 - **Disk caching** — repeated searches are served from cache instantly
 - **Circuit breaker** — forces completion after `max_iterations` to prevent infinite loops
-- **Graceful degradation** — every failure mode has a fallback (scrape fail → snippet, critique fail → force pass)
+- **Graceful degradation** — every failure mode degrades honestly (scrape fail → snippet fallback; critique fail → reported as a failed evaluation, score 0, never a false pass)
 
 ---
 
@@ -130,6 +130,8 @@ python run_agent.py
 
 ### Example Session
 
+Illustrative structure only — not output from an actual run:
+
 ```
 What would you like to research?
 > What is the current state of solid-state batteries?
@@ -140,8 +142,8 @@ What would you like to research?
     ✓ execute_search_query: "solid-state battery energy density 2025"
     ✓ execute_search_query: "solid-state battery commercialization timeline"
     ✓ execute_search_query: "solid-state battery vs lithium-ion safety"
-  Synthesizing: Scored 9 sources (top: 0.90, 0.80, 0.70)...
-  Draft ready. Quality score: 0.72
+  Synthesizing: Scored 9 sources...
+  Draft ready. Quality score: <depends on run>
 
 [PAUSE] Review the draft above.
   Press Enter to approve, type feedback to steer, or 'q' to quit:
@@ -155,10 +157,10 @@ Final Answer:
 [comprehensive research report with citations]
 
 === Session Cost ===
-  Tavily searches: 6 (3 cached)
-  Jina scrapes: 6
-  Groq tokens: 12,450 in / 2,100 out
-  Estimated cost: $0.01
+  Tavily searches: <count>
+  Jina scrapes: <count>
+  Groq tokens: <in> in / <out> out
+  Estimated cost: <varies by run>
 ```
 
 ---
@@ -281,7 +283,7 @@ Prevents infinite loops when the LLM is perpetually unsatisfied.
 
 Every LLM call goes through LangChain's `ChatGroq` and the pipeline is a LangGraph, so a run can be traced end to end in **LangSmith** with no changes to any node. Tracing is **off by default** and turns on entirely through environment variables.
 
-**What gets traced (when enabled):** all four LLM nodes — `plan`, `synthesize`, `critique`, and `refine` (the detective) — each with its prompt, response, token usage, and latency, plus the LangGraph structure of the run (the parallel search fan-out and the loop back to `plan`). Tavily/Jina calls appear as nested spans inside each node, and failures/retries surface as errored spans.
+**What gets traced (when enabled):** `plan` and `synthesize` — confirmed tracing successfully, each with prompt, response, token usage, and latency, plus the LangGraph structure of the run (the parallel search fan-out and the loop back to `plan`). `critique` and `refine` (the detective) trace identically when they run successfully, but in observed runs they were only seen erroring (Groq free-tier 413 — see Known Limitation below), so no observed-success claim is made for those two spans. Tavily/Jina calls appear as nested spans inside each node, and failures/retries surface as errored spans.
 
 **How to enable it.** These are standard LangChain/LangSmith variables — the repo's code doesn't read them; LangChain's runtime does, once `run_agent.py` loads your `.env` via `load_dotenv()`. Uncomment them in `.env`:
 

@@ -383,7 +383,6 @@ def synthesize_node(state: Dict[str, Any]) -> Dict[str, Any]:
     top_scores = [f"{item.get('credibility_score', 0):.2f}" for item in scored_items[:3]]
     logger.info(f"[synthesize_node] Top 3 credibility scores: {top_scores}")
 
-    # Format knowledge base for prompt (with scores visible)
     formatted_knowledge = "\n\n---\n\n".join([
         f"**CREDIBILITY SCORE: {item.get('credibility_score', 0.5):.2f}** ({', '.join(item.get('credibility_reasons', []))})\n"
         f"Source: {item.get('title', 'Unknown')}\n"
